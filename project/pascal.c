@@ -9,55 +9,12 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include "common.h"
 #include "constants.h"
 #include "err.h"
 
-
-void preparePascalPipes(int* readPipe, int* writePipe) {
-	if (close(readPipe[1]) == -1)
-		syserr("Error in preparing read pipe, Pascal\n");
-	if (close(writePipe[0]) == -1) {
-		syserr("Error in preparing write pipe, Pascal\n");
-	}
-}
-
-void initPascalPipes(int* readPipe, int* writePipe) {
-	if (pipe(readPipe) == -1)
-		syserr("Error in reading pipe, Pascal\n");
-	if (pipe(writePipe) == -1)
-		syserr("Error in writing pipe, Pascal\n");
-}
-
-void closePascalDescriptors(int* readPipe, int* writePipe) {
-	if (close(readPipe[0]) == -1)
-		syserr("Error in closing read pipe, Pascal\n");
-	if (close(writePipe[1]) == -1) {
-		syserr("Error in closing write pipe, Pascal\n");
-	}
-}
-
-// Pipe naming is fit to original Pascal process pipes,
-// so that 'readPipe' the one that is used by Pascal to read messages from.
-void closeWorkerDescriptors(int* readPipe, int* writePipe) {
-	if (close(readPipe[0]) == -1)
-		syserr("Initial worker, readPipe[0].\n");
-	if (close(readPipe[1]) == -1)
-		syserr("Initial worker, readPipe[0].\n");
-	if (close(writePipe[0]) == -1)
-		syserr("Initial worker, readPipe[0].\n");
-	if (close(writePipe[1]) == -1)
-		syserr("Initial worker, readPipe[0].\n");
-}
-
-void reassignWorkerDescriptor(int descriptor, int* pipe) {
-	if (close(descriptor) == -1)
-		syserr("Error while closing descriptor: %d, FIRST worker.\n", descriptor);
-	if (dup(pipe[descriptor]) != descriptor)
-		syserr("Descriptor: %d not overriden, FIRST worker.\n", descriptor);
-}
-
-void readNPrintData(const int readDsc) {
-	const int structSize = sizeof(struct TriangleCeofficient);
+void readNPrintData(int readDsc) {
+	int structSize = sizeof(struct TriangleCeofficient);
 	struct TriangleCeofficient dataMsg;
 	const int coeffSize = sizeof(dataMsg.ceofficient);
 
@@ -92,32 +49,26 @@ void readNPrintData(const int readDsc) {
 	}
 }
 
-void readConfirmationSymbol(const int readDsc) {
-	struct ConfirmationMsg confirmationMsg;
-	if (read(readDsc, &confirmationMsg, sizeof(struct ConfirmationMsg)) == -1)
-		syserr("Error while reading Worker response.\n");
-	if (confirmationMsg.result = success)
-		syserr("Unknown job confirmation response.\n");
-}
-
-void prepareNextRequestMsg(enum Token token, const int workersLeft,
+void prepareNextRequestMsg(enum Token mode, int workersLeft,
 	struct RequestMsg* requestMsg) {
-	requestMsg->token = token;
+	requestMsg->token = mode;
 	requestMsg->workersLeft = workersLeft;
 	requestMsg->previousCeofficient = 1;
 }
 
-void readWorkerResponse(const int readDsc, enum PascalMode* mode,
-	struct RequestMsg* requestMsg, int* workers, const int maxWorkers) {
+void readWorkerResponse(int readDsc, enum Token* mode,
+	struct RequestMsg* requestMsg, int* workers, int maxWorkers) {
+	struct ConfirmationMsg confirmationMsg;
+	int confirmationMsgSize = sizeof(struct ConfirmationMsg);
 
 	switch (*mode) {
 		case init:
-			readConfirmationSymbol(readDsc);
+			readConfirmationSymbol(readDsc, confirmationMsg, confirmationMsgSize);
 			*mode = compute;
 			prepareNextRequestMsg(compute, 1, requestMsg);
 			break;
 		case compute:
-			readConfirmationSymbol(readDsc);
+			readConfirmationSymbol(readDsc, confirmationMsg, confirmationMsgSize);
 			if (*workers == maxWorkers) {
 				*mode = gatherResults;
 				prepareNextRequestMsg(gatherResults, *workers, requestMsg);
@@ -132,7 +83,7 @@ void readWorkerResponse(const int readDsc, enum PascalMode* mode,
 			prepareNextRequestMsg(waitAndClose, *workers, requestMsg);
 			break;
 		case waitAndClose:
-			readConfirmationSymbol();
+			readConfirmationSymbol(readDsc, confirmationMsg, confirmationMsgSize);
 			break;
 	}  // switch(mode)
 }
@@ -143,11 +94,11 @@ int main(int argc, char* argv[]) {
 		fatal("Usage: %s <number of row in Pascals' Triangle>\n", argv[0]);
 	
 	// Eliminate requests with illegal row number.
-	const int targetRow = atoi(argv[1]);
+	int targetRow = atoi(argv[1]);
 	if (targetRow <= 0)
 		fatal("Row number should be expressed with positive value!\n");
 
-	const int maxWorkers = targetRow;
+	int maxWorkers = targetRow;
 	int workers = maxWorkers;
 
 	// Create and initialize pipes.
@@ -157,36 +108,36 @@ int main(int argc, char* argv[]) {
 	initPascalPipes(&readPipe, &writePipe);
 
 	// Set flags and constants.
-	enum PascalMode mode = initChain;
-	enum Token token = init;
-	const int writeDsc = writePipe[1];
-	const int readDsc = readPipe[0];
+	enum Token mode = init;
+	int readDsc = readPipe[0];
+	int writeDsc = writePipe[1];
 
 	// Initialize first Pascals' request.
 	struct RequestMsg requestMsg;
+	int requestMsgSize = sizeof(struct RequestMsg);
 	prepareNextRequestMsg(init, workers, &requestMsg);
 
 	switch (fork()) {
 		case -1:
 			syserr("Error in fork, Pascal\n");
 		case 0:
-			// Prepare first worker process.
-			reassignWorkerDescriptor(STDOUT_FILENO, &readPipe);
-			reassignWorkerDescriptor(STDIN_FILENO, &writePipe);
+			// Prepare first Worker process.
+			reassignChildDescriptor(STDOUT_FILENO, &readPipe);
+			reassignChildDescriptor(STDIN_FILENO, &writePipe);
 			
-			// Close pipes in worker process - free resources.
-			closeWorkerDescriptors(&readPipe, &writePipe);
+			// Close pipes in Worker process - free resources.
+			closeUnusedChildDescriptors(&readPipe, &writePipe);
 			
-			execl("./worker", "worker", argv[1]);
+			execl("./worker", "worker", argv[1], (char*) NULL);
 			syserr("Error in execl\n");
 		default:
-			preparePascalPipes(&readPipe, &writePipe);
+			prepareParentPipes(&readPipe, &writePipe);
 			while (true) {
 				// Write directly to the FIRST Worker process.
-				if (write(writeDsc, &requestMsg, sizeof(struct RequestMsg)) == -1)
+				if (write(writeDsc, &requestMsg, requestMsgSize) == -1)
 					syserr("Error while sending request message to initial Worker.\n");
 
-				// Read worker response.
+				// Read Worker response.
 				readWorkerResponse(readDsc, &mode, &requestMsg, &workers, maxWorkers);
 
 				// Wait for Worker process.
@@ -196,7 +147,7 @@ int main(int argc, char* argv[]) {
 					break;
 				}
 			}
-			closePascalDescriptors(&readPipe, &writePipe);
+			closeParentDescriptors(&readPipe, &writePipe);
 	}  // switch(fork())
 	
 	exit(EXIT_SUCCESS);
