@@ -11,13 +11,6 @@ enum WorkerMode {
 	closed = 3 // Wait for child process, free allocated resources and exit.
 };
 
-enum PascalMode {
-	initChain = 0, // Chain of worker processes still does not exist.
-	commitComputation = 1, //
-	gatherResults = 2, //
-	waitAndClose = 3 // --------||--------
-};
-
 enum Token {
 	init = 0, //
 	compute = 1, // 
@@ -44,4 +37,5 @@ struct TriangleCeofficient {
 struct RequestMsg {
 	enum Token token; // One of tokens from Token enum.
 	int workersLeft; // Number of workers required for complete current row.
+	int previousCeofficient; // Appropriate ceofficient from predecessing row.
 };
