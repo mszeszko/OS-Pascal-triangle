@@ -36,6 +36,26 @@ void closePascalDescriptors(int* readPipe, int* writePipe) {
 	}
 }
 
+// Pipe naming is fit to original Pascal process pipes,
+// so that 'readPipe' the one that is used by Pascal to read messages from.
+void closeWorkerDescriptors(int* readPipe, int* writePipe) {
+	if (close(readPipe[0]) == -1)
+		syserr("Initial worker, readPipe[0].\n");
+	if (close(readPipe[1]) == -1)
+		syserr("Initial worker, readPipe[0].\n");
+	if (close(writePipe[0]) == -1)
+		syserr("Initial worker, readPipe[0].\n");
+	if (close(writePipe[1]) == -1)
+		syserr("Initial worker, readPipe[0].\n");
+}
+
+void reassignWorkerDescriptor(int descriptor, int* pipe) {
+	if (close(descriptor) == -1)
+		syserr("Error while closing descriptor: %d, FIRST worker.\n", descriptor);
+	if (dup(pipe[descriptor]) != descriptor)
+		syserr("Descriptor: %d not overriden, FIRST worker.\n", descriptor);
+}
+
 void readNPrintData(const int readDsc) {
 	const int structSize = sizeof(struct TriangleCeofficient);
 	struct TriangleCeofficient dataMsg;
@@ -43,20 +63,20 @@ void readNPrintData(const int readDsc) {
 
 	int readDataMsg;
 	int writeDataMsg;
+	// Read data portions till EOF will be detected.
 	while (readDataMsg = read(readDsc, &dataMsg, structSize)) {
-		// EOF, data has been properly printed.
-		if (readDataMsg == 0)
-			break;
 		// Error occured.
 		if (readDataMsg == -1)
 			syserr("Error while reading triangle results, Pascal\n");
 		
-		// By default `sizeOfStructure` bytes should be read.
+		// By default `structSize` bytes should be read.
 		if (readDataMsg != structSize)
-			syserr("Illegal structure size while reading triangle results, Pascal\n");
+			syserr("Illegal struct size while reading triangle results in Pascal\n");
 		
+		// Print ceofficient to STDOUT.
 		writeDataMsg = write(STDOUT_FILENO, &(dataMsg.ceofficient), ceoffSize);
 		
+		// Handle write message..
 		switch (writeDataMsg) {
 			case -1:
 				syserr("Error while writing triangle results to STDOUT\n");
@@ -69,19 +89,7 @@ void readNPrintData(const int readDsc) {
 				// Exactly `coeffSize` bytes should be written to STDOUT.
 				syserr("Written unexpected number of bytes to STDOUT, Pascal\n");
 		}
-}
-
-void reassignWorkerDescriptor(int descriptor, int* pipe) {
-	if (close(descriptor) == -1)
-		syserr("Error while closing descriptor: %d, FIRST worker.\n", descriptor);
-	if (dup(pipe[descriptor]) != descriptor)
-		syserr("Descriptor: %d not overriden, FIRST worker.\n", descriptor);
-}
-
-void setNextRequestMsg(enum Token token, const int workersLeft,
-	struct RequestMsg* requestMsg) {
-	requestMsg->token = token;
-	requestMsg->workersLeft = workersLeft;
+	}
 }
 
 void readConfirmationSymbol(const int readDsc) {
@@ -92,30 +100,50 @@ void readConfirmationSymbol(const int readDsc) {
 		syserr("Unknown confirmation symbol.\n");
 }
 
+void prepareNextRequestMsg(enum Token token, const int workersLeft,
+	struct RequestMsg* requestMsg) {
+	requestMsg->token = token;
+	requestMsg->workersLeft = workersLeft;
+	requestMsg->previousCeofficient = 1;
+}
+
 void readWorkerResponse(const int readDsc, enum PascalMode* mode,
 	struct RequestMsg* requestMsg, int* workers, const int maxWorkers) {
 
 	switch (*mode) {
 		case init:
 			readConfirmationSymbol(readDsc);
-			*mode = commitComputation;
-			setNextRequestMsg(compute, 1);
+			*mode = compute;
+			prepareNextRequestMsg(compute,
+														1,
+														requestMsg);
 			break;
 		case compute:
 			readConfirmationSymbol(readDsc);
-			if (*workers == maxWorkers)
+			if (*workers == maxWorkers) {
 				*mode = gatherResults;
-			else	
-				setNextRequestMsg(compute, requestMsg->workersLeft + 1);
+				prepareNextRequestMsg(gatherResults,
+															*workers,
+															requestMsg);
+			} else {	
+				prepareNextRequestMsg(compute,
+															requestMsg->workersLeft + 1,
+															requestMsg);
+			}
 			break;
 		case gatherResults:
 			readNPrintData(readDsc);
 			*mode = waitAndClose;
+			prepareNextRequestMsg(waitAndClose,
+														*workers,
+														requestMsg);
 			break;
-		/*case waitAndClose:
-			readConfirmationSymbol();*/
-
+		case waitAndClose:
+			readConfirmationSymbol();
+			break;
 	}  // switch(mode)
+}
+
 int main(int argc, char* argv[]) {
 	// Usage info in case of invalid parameters number.
 	if (argc != 2)
@@ -142,7 +170,7 @@ int main(int argc, char* argv[]) {
 
 	// Initialize first Pascals' request.
 	struct RequestMsg requestMsg;
-	setNextRequestMsg(init, workers);
+	prepareNextRequestMsg(init, workers, &requestMsg);
 
 	switch (fork()) {
 		case -1:
@@ -151,16 +179,10 @@ int main(int argc, char* argv[]) {
 			// Prepare first worker process.
 			reassignWorkerDescriptor(STDOUT_FILENO, &readPipe);
 			reassignWorkerDescriptor(STDIN_FILENO, &writePipe);
+			
 			// Close pipes in worker process - free resources.
-			if (close(readPipe[0]) == -1)
-				syserr("Initial worker, readPipe[0].\n");
-			if (close(readPipe[1]) == -1)
-				syserr("Initial worker, readPipe[0].\n");
-			if (close(writePipe[0]) == -1)
-				syserr("Initial worker, readPipe[0].\n");
-			if (close(writePipe[1]) == -1)
-				syserr("Initial worker, readPipe[0].\n");
-
+			closeWorkerDescriptors(&readPipe, &writePipe);
+			
 			execl("./worker", "worker", argv[1]);
 			syserr("Error in execl\n");
 		default:
@@ -169,16 +191,19 @@ int main(int argc, char* argv[]) {
 				// Write directly to the FIRST Worker process.
 				if (write(writeDsc, &requestMsg, sizeof(struct RequestMsg)) == -1)
 					syserr("Error while sending request message to initial Worker.\n");
-				// Read worker response.
-				readWorkerResponse(....);
 
-				if (mode == każ im się ubić) {
+				// Read worker response.
+				readWorkerResponse(readDsc, &mode, &requestMsg, &workers, targetRow);
+
+				// Wait for Worker process.
+				if (mode == waitAndClose) {
+					if (wait(NULL) == -1)
+						syserr("Error in child process, PASCAL.\n");
+					break;
 				}
 			}
-			
-			printData(readDsc);
 			closePascalDescriptors(&readPipe, &writePipe);
-	}
+	}  // switch(fork())
 	
 	exit(EXIT_SUCCESS);
 }
