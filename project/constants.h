@@ -20,7 +20,7 @@ enum Token {
 
 
 // Success message:
-const char success = '#';
+#define SUCCESS '#'
 
 struct ConfirmationMsg {
 	// After accomplishing speficic request job,
@@ -40,3 +40,6 @@ struct RequestMsg {
 	int workersLeft; // Number of workers required to complete the current row.
 	int previousCeofficient; // Appropriate ceofficient from predecessing row.
 };
+
+// Size of process number represented as a string.
+#define PROC_NUMBER_BUF_SIZE 17
