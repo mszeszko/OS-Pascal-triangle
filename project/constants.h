@@ -6,23 +6,23 @@
 
 enum WorkerMode {
 	ready = 0 // Created and initialized, but not active yet.
-	compute = 1, // 
+	compute = 1, // Worker about to compute the coefficient.
 	send = 2, // Send processed data to the predecessor.
-	closed = 3 // Wait for child process, free allocated resources and exit.
+	close = 3 // Wait for child process, free allocated resources and exit.
 };
 
 enum Token {
 	init = 0, //
 	compute = 1, // 
 	gatherResults = 2, //
-	waitAndClose = 3
+	waitAndClose = 3 //
 };
 
 
 // Success message:
 const char success = '#';
 
-struct ProcessConfirmMsg {
+struct ProcessConfirmationMsg {
 	// After accomplishing request for speficic token,
 	// process is obliged to return confirmation message to the predecessor.
 	char msg;
@@ -35,7 +35,7 @@ struct TriangleCeofficient {
 };
 
 struct RequestMsg {
-	enum Token token; // One of tokens from Token enum.
+	enum Token token;
 	int workersLeft; // Number of workers required for complete current row.
 	int previousCeofficient; // Appropriate ceofficient from predecessing row.
 };
