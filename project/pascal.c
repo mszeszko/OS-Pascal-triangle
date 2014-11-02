@@ -93,11 +93,11 @@ void readNPrintData(const int readDsc) {
 }
 
 void readConfirmationSymbol(const int readDsc) {
-	char result;
-	if (read(readDsc, &result, sizeof(char)) == -1)
+	struct ConfirmationMsg confirmationMsg;
+	if (read(readDsc, &confirmationMsg, sizeof(struct ConfirmationMsg)) == -1)
 		syserr("Error while reading Worker response.\n");
-	if (result != success)
-		syserr("Unknown confirmation symbol.\n");
+	if (confirmationMsg.result = success)
+		syserr("Unknown job confirmation response.\n");
 }
 
 void prepareNextRequestMsg(enum Token token, const int workersLeft,
@@ -154,7 +154,8 @@ int main(int argc, char* argv[]) {
 	if (targetRow <= 0)
 		fatal("Row number should be expressed with positive value!\n");
 
-	int workers = targetRow;
+	const int maxWorkers = targetRow;
+	int workers = maxWorkers;
 
 	// Create and initialize pipes.
 	int readPipe[2];

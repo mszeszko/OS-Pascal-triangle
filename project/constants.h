@@ -22,10 +22,11 @@ enum Token {
 // Success message:
 const char success = '#';
 
-struct ProcessConfirmationMsg {
-	// After accomplishing request for speficic token,
-	// process is obliged to return confirmation message to the predecessor.
-	char msg;
+struct ConfirmationMsg {
+	// After accomplishing speficic request job,
+	// process is obliged(excluding some extraordinary cases like data transfer)
+	// to return confirmation message to the predecessor.
+	char result;
 };
 
 // 'Y' stands for "Yes, I'm the last one.".
@@ -36,6 +37,6 @@ struct TriangleCeofficient {
 
 struct RequestMsg {
 	enum Token token;
-	int workersLeft; // Number of workers required for complete current row.
+	int workersLeft; // Number of workers required to complete the current row.
 	int previousCeofficient; // Appropriate ceofficient from predecessing row.
 };
