@@ -114,29 +114,22 @@ void readWorkerResponse(const int readDsc, enum PascalMode* mode,
 		case init:
 			readConfirmationSymbol(readDsc);
 			*mode = compute;
-			prepareNextRequestMsg(compute,
-														1,
-														requestMsg);
+			prepareNextRequestMsg(compute, 1, requestMsg);
 			break;
 		case compute:
 			readConfirmationSymbol(readDsc);
 			if (*workers == maxWorkers) {
 				*mode = gatherResults;
-				prepareNextRequestMsg(gatherResults,
-															*workers,
-															requestMsg);
-			} else {	
-				prepareNextRequestMsg(compute,
-															requestMsg->workersLeft + 1,
-															requestMsg);
+				prepareNextRequestMsg(gatherResults, *workers, requestMsg);
+			} else {
+				prepareNextRequestMsg(compute, requestMsg->workersLeft + 1,
+					requestMsg);
 			}
 			break;
 		case gatherResults:
 			readNPrintData(readDsc);
 			*mode = waitAndClose;
-			prepareNextRequestMsg(waitAndClose,
-														*workers,
-														requestMsg);
+			prepareNextRequestMsg(waitAndClose, *workers, requestMsg);
 			break;
 		case waitAndClose:
 			readConfirmationSymbol();
@@ -194,7 +187,7 @@ int main(int argc, char* argv[]) {
 					syserr("Error while sending request message to initial Worker.\n");
 
 				// Read worker response.
-				readWorkerResponse(readDsc, &mode, &requestMsg, &workers, targetRow);
+				readWorkerResponse(readDsc, &mode, &requestMsg, &workers, maxWorkers);
 
 				// Wait for Worker process.
 				if (mode == waitAndClose) {
