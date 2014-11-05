@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
 					break;
 				}
 			}
-			closeParentDescriptors(&readPipe, &writePipe);
+			closeParentDescriptors(readDsc, writeDsc);
 	}  // switch(fork())
 	
 	exit(EXIT_SUCCESS);

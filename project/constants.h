@@ -18,9 +18,10 @@ enum Token {
 	waitAndClose = 3 //
 };
 
-
 // Success message:
 #define SUCCESS '#'
+#define LAST_ONE 'Y'
+#define NOT_LAST 'N'
 
 struct ConfirmationMsg {
 	// After accomplishing speficic request job,

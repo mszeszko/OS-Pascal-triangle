@@ -29,12 +29,19 @@ void initParentPipes(int* readPipe, int* writePipe) {
 		syserr("Error in writing pipe, Pascal\n");
 }
 
-void closeParentDescriptors(int* readPipe, int* writePipe) {
+void closeParentDescriptors(int readDsc, int writeDsc) {
 	if (close(readPipe[0]) == -1)
 		syserr("Error in closing read pipe, Pascal\n");
 	if (close(writePipe[1]) == -1) {
 		syserr("Error in closing write pipe, Pascal\n");
 	}
+}
+
+void closeOverridenStandardDescriptors() {
+	if (close(STDIN_FILENO) == -1)
+		syserr("Error in closing STDIN descriptor.\n");
+	if (close(STDOUT_FILENO) == -1)
+		syserr("Error in closing STDOUT descriptor.\n");
 }
 
 // Pipe naming is fit to PARENT process pipes,

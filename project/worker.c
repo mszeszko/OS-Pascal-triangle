@@ -165,7 +165,7 @@ int main(int argc, char* argv[]) {
 				break;
 			case gatherResults:
 				// Since I'm not the last worker process in the list..
-				if (requestMsg.workLeft > 1) {
+				if (requestMsg.workersLeft > 1) {
 					// Forward gathering alert to the child,
 					if (write(writeDsc, &requestMsg, requestMsgSize) == -1)
 						syserr("Error while passing gather message to the child.\n");
@@ -191,15 +191,36 @@ int main(int argc, char* argv[]) {
 							break;
 					}
 				}
+				// Update mode.
+				mode = gatherResults;
+
 				// After processing all descendant ceofficients, prepare 
 				// your own request message and send it to your direct ancestor.
 				// Remember to notify that it's actually the last one to be fetched!
 				initTriangleCeofficient(&triangleCeofficient, actualCeofficient);
 	
-				// Pass actual ceofficient to direct parent process.
+				// Pass actual ceofficient to father process.
 				if (write(STDOUT, &triangleCeofficient, triangleCeofficientSize) == -1)
 					syserr("Error while passing actual ceofficient to the parent.\n");
+				break;
+			case waitAndClose:
+				// Since I'm not the last worker process in the list..
+				if (requestMsg.workersLeft > 1) {
+					// Forward closing alert to the child.
+					if (write(writeDsc, &requestMsg, requestMsgSize) == -1)
+						syserr("Error while writing `close` message to the child.\n");
+					
+					// Wait for the child.
+					if (wait(NULL) == -1)
+						syserr("Error in wait, WORKER.\n");
+					
+					// Free resources. By parent I mean current process.
+					closeParentDescriptors(readDsc, writeDsc);
+				}
+				closeOverridenStandardDescriptors();
+				
+				// Finish work.
+				exit(EXIT_SUCCESS);
 		}
 	}
-	exit(EXIT_SUCCESS);
 }
