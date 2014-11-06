@@ -4,6 +4,9 @@
 			University of Warsaw
 */
 
+#ifndef __COMMON_H_
+#define __COMMON_H_
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -30,9 +33,9 @@ void initParentPipes(int* readPipe, int* writePipe) {
 }
 
 void closeParentDescriptors(int readDsc, int writeDsc) {
-	if (close(readPipe[0]) == -1)
+	if (close(readDsc) == -1)
 		syserr("Error in closing read pipe, Pascal\n");
-	if (close(writePipe[1]) == -1) {
+	if (close(writeDsc) == -1) {
 		syserr("Error in closing write pipe, Pascal\n");
 	}
 }
@@ -44,8 +47,8 @@ void closeOverridenStandardDescriptors() {
 		syserr("Error in closing STDOUT descriptor.\n");
 }
 
-// Pipe naming is fit to PARENT process pipes,
-// so that 'readPipe' the one that is used by PARENT to read messages from.
+/* Pipe naming is fit to PARENT process pipes,
+	 so that 'readPipe' the one that is used by PARENT to read messages from. */
 void closeUnusedChildDescriptors(int* readPipe, int* writePipe) {
 	if (close(readPipe[0]) == -1)
 		syserr("Initial worker, readPipe[0].\n");
@@ -68,6 +71,8 @@ void readConfirmationSymbol(const int readDsc,
 	struct ConfirmationMsg* confirmationMsg, int confirmationMsgSize) {
 	if (read(readDsc, confirmationMsg, confirmationMsgSize) == -1)
 		syserr("Error while reading child response.\n");
-	if (confirmationMsg->result = SUCCESS)
+	if (confirmationMsg->result == SUCCESS)
 		syserr("Unknown job confirmation response.\n");
 }
+
+#endif

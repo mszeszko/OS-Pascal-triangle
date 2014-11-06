@@ -3,7 +3,7 @@ CFLAGS = -Wall -ansi --pedantic -c
 LDFLAGS = -Wall -ansi --pedantic
 
 OBJECTS = err.o
-ALL = pascal worker
+ALL = worker
 
 all: $(ALL)
 
