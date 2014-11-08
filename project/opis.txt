@@ -1,0 +1,83 @@
+========================
+Protokół komunikacyjny:
+========================
+
+Procesy komunikują się ze sobą za pomocą struktur
+zdefiniowanych w pliku nagłówkowym `constants.h`.
+Wyróżniamy 4 fazy komunikacyjne pomiędzy procesami:
+
+1) Faza inicjacji listy obliczającej:
+	W procesie Pascala tworzymy dwa łącza nienazwane
+	oraz proces potomny Workera, któremu podmieniamy deskryptory
+	STDIN oraz STDOUT tak, ażeby mógł się odpowiednio komunikować
+	z Pascalem. W kodzie procesu potomnego wywołujemy funkcję `exec`
+	przekazując numer procesu jako jeden z jego parametrów
+	(dzięki temu wiemy kiedy mamy skończyć inicjację listy).
+	Dowolny Proces Worker_k przechodzi fazę inicjacji w następujący sposób:
+		I) Sprawdza swój numer przekazany jako argument w funkcji `exec`
+			 procesu macierzystego:
+			a) Jeśli nie jest ostatnim procesem w tworzonej liście,
+				 czyli jego numer > 1(numerujemy procesy kolejno N `downto` 1),
+				 to inicjacja potomka(procesu Workera o numerze `k-1`)
+				 jest analogiczna do wyżej przedstawionej.
+				 Po wywołaniu funkcji fork w kodzie procesu macierzystego
+				 oczekujemy na `ConfirmationMsg`(wiadomość potwierdzająca szczęśliwe
+				 zakończenie aktualnie wykonywanej akcji) od potomka.
+				 Po otrzymaniu tej wiadomości k-ty proces Workera wie,
+				 że wszyscy jego potomkowie zostali poprawnie zainicjowani,
+				 po czym sam forwarduje tę wiadomość do swojego rodzica.
+			b) W przeciwnym wypadku, proces nie tworzy kolejnego potomka,
+				 ale za to przesyła komunikat `ConfirmationMsg` potwierdzający
+				 wykonanie akcji do swojego rodzica.
+	W końcu więc i proces Pascala otrzymuje wiadomość o poprawnym zakończeniu
+	zleconej akcji od procesu Worker_1, po czym zmienia fazę.
+
+2) Faza obliczeniowa:
+	W tej fazie proces Pascala będzie zlecał procesowi Workera_1
+	obliczenie współczynników dla kolejnych wierszy trójkąta Pascala.
+	W obliczanie k-tego wiersza trójkąta Pascala zostanie zaangażowanych
+	k pierwszych procesów Worker. Pascal zleca obliczenie kolejnego wiersza
+	przesyłając wiadomość `RequestMsg` z trybem akcji `compute` i
+	liczbą procesów wymaganych do przeliczenia k-tego wiersza `workersLeft`.
+	Komunikat od Pascala będzie zawsze miał pole `previousCeofficient` ustawione
+	na 0. Natomiast każdy inny proces Worker'a będzie modyfikował otrzymaną
+	strukturę poprzez zmniejszenie liczby pracowników o 1 oraz aktualizację
+	pola `previousCeofficient` na swoją dotychczasową wartość, po czym prześle
+	ją procesowi potomnemu(o ile nie jest ostatnim na liście).
+	Podobnie jak w poprzedniej fazie, faza obliczeniowa będzie uwieńczona
+	sekwencyjnym przekazywaniem komunikatów o zakończeniu działania do procesu
+	rodzica.
+
+3) Faza zbierania wyników:
+	Po n-krotnym wykonaniu fazy obliczeniowej omówionej w poprzednim punkcie
+	proces Pascal przesyła komunikat do swojego procesu potomnego o zebranie
+	wyników. Zbieranie wyników przebiegać będzie w sposób następujący:
+		
+		I)	Jeśli jesteś ostatnim procesem na liście, to wyślij do procesu rodzica
+				strukturę `TriangleCeofficient` uzupełnioną o swój aktualnie wyliczony
+				współczynnik(tak się składa, że będzie to zawsze 1) oraz zaznacz,
+				że jesteś ostatnim potomnym procesem w polu `isLast` tej struktury.
+		II) W przeciwnym przypadku odbieraj komunikaty(struktury `TriangleCeofficient`)
+				od potomka tak długo, aż któryś z nich będzie miał odpowiednio odznaczonego
+				pola `isLast` i przesyłaj kolejno do swojego rodzica.
+				Gdy otrzymasz ostatnią paczkę ustaw jej pole `isLast` na nieprawdę,
+				prześlij ją(tę paczkę) do rodzica i skonstruuj odpowiednią paczkę dla siebie,
+				a więc `TriangleCeofficient` z polem `isLast` ustawionym na prawdę
+				oraz `ceofficient` zawierającym odpowiedni współczynnik n-tego wiersza
+				trójkąta Pascala.
+
+	W ten sposób wszystkie paczki ze współczynnikami trafią w dobrej kolejności
+	(symetria) do procesu Pascala. Pascal skończy wczytywać paczki, gdy napotka
+	pierwszą paczkę, której pole `isLast` będzie prawdą, po czym zmieni fazę komunikacji.
+
+4) Faza kończenia procesów:
+	Po tym jak n-ty wiersz trójkąta Pascala został obliczony, przekazany do procesu
+	zarządzającego i wypisany na STDOUT, Pascal przesyła komunikat-rozkaz zakończenia
+	działania procesowi potomnemu i oczekuje na zakończenie procesu potomnego(WAIT).
+	Procesy Workera postępują analogicznie. Po tym jak dowolny proces przejdzie przez
+	WAIT, zwalnia swoje zasoby oraz zamyka wykorzystywane deskryptory.
+
+Po zakończeniu ostatniej fazy każdy z procesów kończy działanie.
+
+
+
