@@ -54,48 +54,63 @@ void initTriangleCeofficient(struct TriangleCeofficient* triangleCeofficient,
 }
 				
 int main(int argc, char* argv[]) {
+	/* Declare FIRST in order to not receive unexpected warning:
+			
+				ISO C90 forbids mixed declarations and code.
+	*/
+	int processNumber;
+	int readPipe[2];
+	int writePipe[2];
+	int readDsc;
+	int writeDsc;
+	struct RequestMsg requestMsg;
+	int requestMsgSize;
+	struct ConfirmationMsg confirmationMsg;
+	int confirmationMsgSize;
+	struct TriangleCeofficient triangleCeofficient;
+	int triangleCeofficientSize;
+	int actualCeofficient;
+	int previousCeofficient; /* Used for assigning temporary ceofficient value. */
+	int readLastCeofficient;
+	enum WorkerMode mode;
+	char childProcessNumberStr[PROC_NUMBER_BUF_SIZE];
+	int childProcessNumber;
+
 	/* Usage info in case of invalid parameters number. */
 	if (argc != 2)
 		fatal("Usage: %s <process number>\n", argv[0]);
 	
 	/* Eliminate requests with illegal row number. */
-	int processNumber = atoi(argv[1]);
+	processNumber = atoi(argv[1]);
 	if (processNumber <= 0)
 		fatal("Row number should be expressed with positive value!\n");
 
 	/* Create and initialize pipes. */
-	int readPipe[2];
-	int writePipe[2];
-
 	initParentPipes(readPipe, writePipe);
 	
-	int readDsc = readPipe[0];
-	int writeDsc = writePipe[1];
+	/* Assign valid descriptors. */
+	readDsc = readPipe[0];
+	writeDsc = writePipe[1];
 
-	/* Core variables. */
-	struct RequestMsg requestMsg;
-	int requestMsgSize = sizeof(struct RequestMsg);
+	/* Set structures size. */
+	requestMsgSize = sizeof(struct RequestMsg);
 	
-	struct ConfirmationMsg confirmationMsg;
-	int confirmationMsgSize = sizeof(struct ConfirmationMsg);
+	confirmationMsgSize = sizeof(struct ConfirmationMsg);
 	confirmationMsg.result = SUCCESS;
 
-	struct TriangleCeofficient triangleCeofficient;
-	int triangleCeofficientSize = sizeof(struct TriangleCeofficient);
+	triangleCeofficientSize = sizeof(struct TriangleCeofficient);
 	
-	int actualCeofficient = 0;
-	int previousCeofficient; /* Used for assigning temporary ceofficient value. */
-	int readLastCeofficient;
+	/* Initialize current ceofficient value. */
+	actualCeofficient = 0;
 
-	enum WorkerMode mode;
-	char childProcessNumberStr[PROC_NUMBER_BUF_SIZE];
-	int childProcessNumber = processNumber - 1;
+	/* Assign child process number. */
+	childProcessNumber = processNumber - 1;
 	
 	while (1) {
 		/* Read message from predecessor. */
 		if (read(STDIN_FILENO, &requestMsg, requestMsgSize) == -1)
 			syserr("Error in process: %d, while reading message.\n", processNumber);
-
+		
 		/* Process message for specified token. */
 		switch (requestMsg.token) {
 			case init:
@@ -113,8 +128,7 @@ int main(int argc, char* argv[]) {
 							closeUnusedChildDescriptors(readPipe, writePipe);
 							
 							sprintf(childProcessNumberStr, "%d", childProcessNumber);
-							execl("./worker", "worker", &childProcessNumberStr,
-								PROC_NUMBER_BUF_SIZE);
+							execl("./worker", "worker", &childProcessNumberStr, (char*)NULL);
 							syserr("Error in exec, process: %d.\n", childProcessNumber);
 						default:
 							/* Write message to the child. */
@@ -142,20 +156,22 @@ int main(int argc, char* argv[]) {
 				if (mode == ready) {
 					actualCeofficient = 1;
 					/* Change mode. */
-					mode = compute;
+					mode = computing;
 				} else {
-					/* Actualize ceofficient value. */
-					previousCeofficient = actualCeofficient;
-					actualCeofficient += requestMsg.previousCeofficient;
+					/* Save previous parent rows' ceofficient value. */
+					previousCeofficient = requestMsg.previousCeofficient;
 					
 					/* Prepare request message for the child. */
 					requestMsg.workersLeft--;
-					requestMsg.previousCeofficient = previousCeofficient;
+					requestMsg.previousCeofficient = actualCeofficient;
 					
 					/* Forward modified message to the child process. */
 					if (write(writeDsc, &requestMsg, requestMsgSize) == -1)
 						syserr("Error while forwarding compute message to the child.\n");
 					
+					/* Actualize new ceofficient value. */
+					actualCeofficient += previousCeofficient;
+
 					/* Read child response. */
 					readConfirmationSymbol(readDsc, &confirmationMsg,
 						confirmationMsgSize);
@@ -168,6 +184,7 @@ int main(int argc, char* argv[]) {
 				/* Since I'm not the last worker process in the list.. */
 				if (requestMsg.workersLeft > 1) {
 					/* Forward gathering alert to the child, */
+					requestMsg.workersLeft--;
 					if (write(writeDsc, &requestMsg, requestMsgSize) == -1)
 						syserr("Error while passing gather message to the child.\n");
 					
@@ -194,7 +211,7 @@ int main(int argc, char* argv[]) {
 				}
 				/* Update mode. */
 				mode = gatherResults;
-
+				
 				/* After processing all descendant ceofficients, prepare 
 					 your own request message and send it to your direct ancestor.
 					 Remember to notify that it's actually the last one to be fetched! */
@@ -204,9 +221,12 @@ int main(int argc, char* argv[]) {
 				if (write(STDOUT_FILENO, &triangleCeofficient, triangleCeofficientSize) == -1)
 					syserr("Error while passing actual ceofficient to the parent.\n");
 				break;
-			case waitAndClose:
+			default: /* case waitAndClose:*/
 				/* Since I'm not the last worker process in the list.. */
 				if (requestMsg.workersLeft > 1) {
+					/* Decrease number of engaged workers on particular level. */
+					requestMsg.workersLeft--;
+
 					/* Forward closing alert to the child. */
 					if (write(writeDsc, &requestMsg, requestMsgSize) == -1)
 						syserr("Error while writing `close` message to the child.\n");

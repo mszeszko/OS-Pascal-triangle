@@ -71,7 +71,7 @@ void readConfirmationSymbol(const int readDsc,
 	struct ConfirmationMsg* confirmationMsg, int confirmationMsgSize) {
 	if (read(readDsc, confirmationMsg, confirmationMsgSize) == -1)
 		syserr("Error while reading child response.\n");
-	if (confirmationMsg->result == SUCCESS)
+	if (confirmationMsg->result != SUCCESS)
 		syserr("Unknown job confirmation response.\n");
 }
 
