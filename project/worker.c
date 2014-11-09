@@ -14,45 +14,108 @@
 #include "constants.h"
 #include "err.h"
 
-void readChildTriangleCeofficient(int readDsc, struct TriangleCeofficient*
-	triangleCeofficient, int triangleCeofficientSize) {
-	int readBytesCounter = read(readDsc, triangleCeofficient,
-		triangleCeofficientSize);
-
-	if (readBytesCounter == -1)
-		syserr("Error while reading child triangle ceofficient.\n");
-	if (readBytesCounter != triangleCeofficientSize)
-		syserr("Expected exactly `triangleCeofficientSize` bytes.\n");
-}
-
-void writeTriangleCeofficientToParent(int writeDsc, struct TriangleCeofficient*
-	triangleCeofficient, int triangleCeofficientSize) {
-	int writeBytesCounter = write(writeDsc, triangleCeofficient,
-		triangleCeofficientSize);
-
-	if (writeBytesCounter == -1)
-		syserr("Error while writing triangle ceofficient to the parent.\n");
-	if (writeBytesCounter != triangleCeofficientSize)
-		syserr("Expected exactly `triangleCeofficientSize` bytes.\n");
-}
-
-/* Returns 1 if given triangleCeofficient structure contains
-	 the last of all descendant ceofficients and set `isLast`
-	 value to NOT_LAST, otherwise function returns 0. */
-int actualizeIfLast(struct TriangleCeofficient* triangleCeofficient) {
-	if (triangleCeofficient->isLast == LAST_ONE) {
-		triangleCeofficient->isLast = NOT_LAST;
-		return 1;
-	}
-	return 0;
-}
-
 void initTriangleCeofficient(struct TriangleCeofficient* triangleCeofficient,
-	int ceofficient) {
+	int ceofficient, char isLastSymbol) {
 	triangleCeofficient->ceofficient = ceofficient;
-	triangleCeofficient->isLast = LAST_ONE;
+	triangleCeofficient->isLast = isLastSymbol;
 }
-				
+
+void computeCeofficients(long int* actualCeofficient, int processNumber,
+	int readDsc, int writeDsc, struct RequestMsg* requestMsg)	{
+	/* Used for assigning temporary ceofficient value. */
+	long int previousParentCeofficient;
+	struct ConfirmationMsg confirmationMsg;
+	int requestMsgSize = sizeof(struct RequestMsg);
+	int confirmationMsgSize = sizeof(struct ConfirmationMsg);
+	int maxMessagesToBeProcessed = processNumber;
+	int processedMessages = 0;
+
+	while (++processedMessages <= maxMessagesToBeProcessed) {		
+		/* Save previous parent ceofficient value. */
+		previousParentCeofficient = requestMsg->previousCeofficient;
+
+		/* Prepare message for the child. */
+		requestMsg->previousCeofficient = *actualCeofficient;
+		
+		if (--requestMsg->workersLeft > 0) {
+			/* Forward modified message to the child process. */
+			if (write(writeDsc, requestMsg, requestMsgSize) == -1)
+				syserr("Error while forwarding COMPUTE request to the child.\n");
+		}
+
+		if (processedMessages != maxMessagesToBeProcessed)
+			/* Read message from parent process. */
+			if (read(STDIN_FILENO, requestMsg, requestMsgSize) == -1)
+				syserr("Error while reading COMPUTE request from parent process.\n");
+
+		/* Actualize new ceofficient value. */
+		if (processedMessages > 1)
+			*actualCeofficient += previousParentCeofficient;
+		else
+			*actualCeofficient = 1;
+	}
+	
+	/* If we are not the last process, then wait for confirmation symbol
+		 from descendant.	*/
+	if (processNumber > 1) {
+		readConfirmationSymbol(readDsc, &confirmationMsg, confirmationMsgSize);	
+	}
+
+	confirmationMsg.result = SUCCESS;
+	/* Pass confirmation message to the parent process. */
+	if (write(STDOUT_FILENO, &confirmationMsg, confirmationMsgSize) == -1)
+		syserr("Error while sending confirmation symbol to the parent process.\n");
+}
+
+void gatherCeofficients(long int actualCeofficient, int processNumber, 
+	int readDsc, int writeDsc, struct RequestMsg* requestMsg) {
+	struct TriangleCeofficient triangleCeofficient;
+	char isLastSymbol;
+	int triangleCeofficientSize = sizeof(struct TriangleCeofficient);
+	int requestMsgSize = sizeof(struct RequestMsg);
+	
+	/* If we are the last process in the list, then pass computed ceofficient
+		 to the parent process. */
+	if (processNumber == 1) {
+		/* Prepare ceofficient package with `LAST_ONE` label. */
+		isLastSymbol = LAST_ONE;
+	} else {
+		/* Since I'm not the last Worker process in the list, mark as `NOT_LAST` */
+		isLastSymbol = NOT_LAST;
+	}
+	
+	/* Init current triangle ceofficient. */
+	initTriangleCeofficient(&triangleCeofficient, actualCeofficient,
+		isLastSymbol);
+	
+	/* Send appropriately prepared package to the parent process. */
+	if (write(STDOUT_FILENO, &triangleCeofficient,
+		triangleCeofficientSize) == -1)
+		syserr("Error while sending ceofficient to the parent process.\n");
+	
+	if (processNumber > 1)
+		/* Forward modified message to the child process. */
+		if (write(writeDsc, requestMsg, requestMsgSize) == -1)
+			syserr("Error while forwarding GATHER message to the child process.\n");
+
+	/* Handle passing messages till the package labeled `LAST_ONE` come out. */ 
+	if (processNumber > 1) {
+		while (1) {
+			/* Read next ceofficient package */
+			if (read(readDsc, &triangleCeofficient, triangleCeofficientSize) == -1)
+				syserr("Error while reading next ceofficient package.\n");
+			
+			/* Despite `isLast` value forward the package to the parent process. */
+			if (write(STDOUT_FILENO, &triangleCeofficient, triangleCeofficientSize) == -1)
+				syserr("Error while forwarding computed coefficient to the parent process.\n");
+		
+			/* If current ceofficient happend to be the last one, stop reading. */
+			if (triangleCeofficient.isLast == LAST_ONE)
+				break;
+		}
+	}
+}
+
 int main(int argc, char* argv[]) {
 	/* Declare FIRST in order to not receive unexpected warning:
 			
@@ -67,12 +130,7 @@ int main(int argc, char* argv[]) {
 	int requestMsgSize;
 	struct ConfirmationMsg confirmationMsg;
 	int confirmationMsgSize;
-	struct TriangleCeofficient triangleCeofficient;
-	int triangleCeofficientSize;
-	int actualCeofficient;
-	int previousCeofficient; /* Used for assigning temporary ceofficient value. */
-	int readLastCeofficient;
-	enum WorkerMode mode;
+	long int actualCeofficient;
 	char childProcessNumberStr[PROC_NUMBER_BUF_SIZE];
 	int childProcessNumber;
 
@@ -97,8 +155,6 @@ int main(int argc, char* argv[]) {
 	
 	confirmationMsgSize = sizeof(struct ConfirmationMsg);
 	confirmationMsg.result = SUCCESS;
-
-	triangleCeofficientSize = sizeof(struct TriangleCeofficient);
 	
 	/* Initialize current ceofficient value. */
 	actualCeofficient = 0;
@@ -148,80 +204,16 @@ int main(int argc, char* argv[]) {
 					if (write(STDOUT_FILENO, &confirmationMsg, confirmationMsgSize) == -1)
 						syserr("Error while forwarding message to the parent.\n");
 				}
-				/* Actualize process mode. */
-				mode = ready;
 				break;
 			case compute:
-				/* If I'm the last one in current row.. */
-				if (mode == ready) {
-					actualCeofficient = 1;
-					/* Change mode. */
-					mode = computing;
-				} else {
-					/* Save previous parent rows' ceofficient value. */
-					previousCeofficient = requestMsg.previousCeofficient;
-					
-					/* Prepare request message for the child. */
-					requestMsg.workersLeft--;
-					requestMsg.previousCeofficient = actualCeofficient;
-					
-					/* Forward modified message to the child process. */
-					if (write(writeDsc, &requestMsg, requestMsgSize) == -1)
-						syserr("Error while forwarding compute message to the child.\n");
-					
-					/* Actualize new ceofficient value. */
-					actualCeofficient += previousCeofficient;
-
-					/* Read child response. */
-					readConfirmationSymbol(readDsc, &confirmationMsg,
-						confirmationMsgSize);
-				}
-				/* Send confirmation message. */
-				if (write(STDOUT_FILENO, &confirmationMsg, confirmationMsgSize) == -1)
-					syserr("Error while writing confirmation message to the parent.\n");
+				computeCeofficients(&actualCeofficient, processNumber, readDsc,
+					writeDsc, &requestMsg);
 				break;
 			case gatherResults:
-				/* Since I'm not the last worker process in the list.. */
-				if (requestMsg.workersLeft > 1) {
-					/* Forward gathering alert to the child, */
-					requestMsg.workersLeft--;
-					if (write(writeDsc, &requestMsg, requestMsgSize) == -1)
-						syserr("Error while passing gather message to the child.\n");
-					
-					/* Read descendants ceofficients in order:
-						 <- [furthermost descendant], ...., [son] */
-					while (1) {
-						/* Read next ceofficient.. */
-						readChildTriangleCeofficient(readDsc, &triangleCeofficient,
-							triangleCeofficientSize);
-						
-						/* Based on this value, it is possible to determine
-							 whether we processed the last descendants ceofficient
-							 (and it's highest time to push our value) or not. */
-						readLastCeofficient = actualizeIfLast(&triangleCeofficient);
-
-						/* Anyway, we have to post the request. */
-						writeTriangleCeofficientToParent(STDOUT_FILENO,
-							&triangleCeofficient, triangleCeofficientSize);
-
-						/* Break the loop if last descendant ceofficient has ben processed.*/
-						if (readLastCeofficient)
-							break;
-					}
-				}
-				/* Update mode. */
-				mode = gatherResults;
-				
-				/* After processing all descendant ceofficients, prepare 
-					 your own request message and send it to your direct ancestor.
-					 Remember to notify that it's actually the last one to be fetched! */
-				initTriangleCeofficient(&triangleCeofficient, actualCeofficient);
-	
-				/* Pass actual ceofficient to father process. */
-				if (write(STDOUT_FILENO, &triangleCeofficient, triangleCeofficientSize) == -1)
-					syserr("Error while passing actual ceofficient to the parent.\n");
+				gatherCeofficients(actualCeofficient, processNumber, readDsc,
+					writeDsc, &requestMsg);
 				break;
-			default: /* case waitAndClose:*/
+			case waitAndClose:
 				/* Since I'm not the last worker process in the list.. */
 				if (requestMsg.workersLeft > 1) {
 					/* Decrease number of engaged workers on particular level. */

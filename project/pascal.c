@@ -14,10 +14,13 @@
 #include "constants.h"
 #include "err.h"
 
-void readNPrintData(int readDsc) {
+void readNPrintData(int readDsc, int writeDsc, struct RequestMsg* requestMsg) {
 	int structSize = sizeof(struct TriangleCeofficient);
 	struct TriangleCeofficient dataMsg;
 	
+	if (write(writeDsc, requestMsg, sizeof(requestMsg)) == -1)
+		syserr("Error while requesting coefficients in Pascal process.\n");
+
 	/* Read data portions till EOF will be detected. */
 	while (1) { 
 		/* Error occured. */
@@ -25,7 +28,7 @@ void readNPrintData(int readDsc) {
 			syserr("Error while reading triangle results, Pascal\n");
 		
 		/* Print ceofficient to STDOUT. */
-		printf("%d\n", dataMsg.ceofficient);
+		printf("%ld\n", dataMsg.ceofficient);
 		
 		/* Finish reading when last message has been already processed. */
 		if (dataMsg.isLast == LAST_ONE)
@@ -40,32 +43,60 @@ void prepareNextRequestMsg(enum Token mode, int workersLeft,
 	requestMsg->previousCeofficient = 0;
 }
 
-void readWorkerResponse(int readDsc, enum Token* mode,
-	struct RequestMsg* requestMsg, int* workers, int maxWorkers) {
+void initProcessList(enum Token* mode, int readDsc, int writeDsc, 
+	struct RequestMsg* requestMsg) {
 	struct ConfirmationMsg confirmationMsg;
 	int confirmationMsgSize = sizeof(struct ConfirmationMsg);
+	int requestMsgSize = sizeof(struct RequestMsg);
+
+	if (write(writeDsc, requestMsg, requestMsgSize) == -1)
+		syserr("Error while sending INIT message to FIRST Worker.\n");
+	
+	readConfirmationSymbol(readDsc, &confirmationMsg, confirmationMsgSize);
+	*mode = compute;
+	prepareNextRequestMsg(*mode, 1, requestMsg);
+}
+
+void computeCeofficients(enum Token* mode, int readDsc, int writeDsc,
+	int maxWorkers, struct RequestMsg* requestMsg) {
+	struct ConfirmationMsg confirmationMsg;
+	int confirmationMsgSize = sizeof(struct ConfirmationMsg);
+	int requestMsgSize = sizeof(struct RequestMsg);
+
+	while (requestMsg->workersLeft <= maxWorkers) {
+		/* Compute next ceofficient. */
+		if (write(writeDsc, requestMsg, requestMsgSize) == -1)
+			syserr("Error while sending COMPUTE message to FIRST Worker.\n");
+
+		/* Increase the number of Workers involved in computation process. */
+		requestMsg->workersLeft++;
+	}
+
+	/* After sending requests wait for all processes finished their tasks. */
+	readConfirmationSymbol(readDsc, &confirmationMsg, confirmationMsgSize);
+	*mode = gatherResults;
+	prepareNextRequestMsg(*mode, maxWorkers, requestMsg);
+}
+
+void gatherCeofficients(enum Token* mode, int readDsc, int writeDsc, 
+	int maxWorkers, struct RequestMsg* requestMsg) {
+	readNPrintData(readDsc, writeDsc, requestMsg);
+	*mode = waitAndClose;
+	prepareNextRequestMsg(*mode, maxWorkers, requestMsg);
+}
+
+void handleOperation(int readDsc, int writeDsc, enum Token* mode,
+	struct RequestMsg* requestMsg, int maxWorkers) {
 
 	switch (*mode) {
 		case init:
-			readConfirmationSymbol(readDsc, &confirmationMsg, confirmationMsgSize);
-			*mode = compute;
-			prepareNextRequestMsg(compute, 1, requestMsg);
-			*workers = 1;
+			initProcessList(mode, readDsc, writeDsc, requestMsg);
 			break;
 		case compute:
-			readConfirmationSymbol(readDsc, &confirmationMsg, confirmationMsgSize);
-			if (*workers == maxWorkers) {
-				*mode = gatherResults;
-				prepareNextRequestMsg(gatherResults, *workers, requestMsg);
-			} else {
-				prepareNextRequestMsg(compute, ++(*workers),
-					requestMsg);
-			}
+			computeCeofficients(mode, readDsc, writeDsc, maxWorkers, requestMsg);
 			break;
 		case gatherResults:
-			readNPrintData(readDsc);
-			*mode = waitAndClose;
-			prepareNextRequestMsg(waitAndClose, *workers, requestMsg);
+			gatherCeofficients(mode, readDsc, writeDsc, maxWorkers, requestMsg);
 			break;
 		default: /* case waitAndClose: */
 			/* Just to avoid stupid warnings. */
@@ -88,7 +119,6 @@ int main(int argc, char* argv[]) {
 	*/
 	int targetRow;
 	int maxWorkers;
-	int workers;
 	int readPipe[2];
 	int writePipe[2];
 	enum Token mode;
@@ -107,7 +137,6 @@ int main(int argc, char* argv[]) {
 		fatal("Row number should be expressed with positive value!\n"); 
 
 	maxWorkers = targetRow;
-	workers = maxWorkers;
 
 	/* Create and initialize pipes. */
 	initParentPipes(readPipe, writePipe);
@@ -119,7 +148,7 @@ int main(int argc, char* argv[]) {
 
 	/* Initialize first Pascals' request. */
 	requestMsgSize = sizeof(struct RequestMsg);
-	prepareNextRequestMsg(init, workers, &requestMsg);
+	prepareNextRequestMsg(init, maxWorkers, &requestMsg);
 
 	switch (fork()) {
 		case -1:
@@ -137,13 +166,8 @@ int main(int argc, char* argv[]) {
 		default:
 			prepareParentPipes(readPipe, writePipe);
 			while (1) {
-				/* Write directly to the FIRST Worker process. */
-				if (write(writeDsc, &requestMsg, requestMsgSize) == -1)
-					syserr("Error while sending request message to initial Worker.\n");
-				
-				/* Read Worker response. */
-				readWorkerResponse(readDsc, &mode, &requestMsg, &workers, maxWorkers);
-				
+				handleOperation(readDsc, writeDsc, &mode, &requestMsg, maxWorkers);
+
 				/* Wait for Worker process. */
 				if (mode == waitAndClose) {
 					sendCloseMsg(writeDsc, &requestMsg, requestMsgSize);

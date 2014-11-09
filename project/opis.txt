@@ -44,9 +44,8 @@ Wyróżniamy 4 fazy komunikacyjne pomiędzy procesami:
 	strukturę poprzez zmniejszenie liczby pracowników o 1 oraz aktualizację
 	pola `previousCeofficient` na swoją dotychczasową wartość, po czym prześle
 	ją procesowi potomnemu(o ile nie jest ostatnim na liście).
-	Podobnie jak w poprzedniej fazie, faza obliczeniowa będzie uwieńczona
-	sekwencyjnym przekazywaniem komunikatów o zakończeniu działania do procesu
-	rodzica.
+	W tej fazie proces Pascal wysyła na raz 'n' komunikatów do procesu
+	Worker_1, dzięki czemu uzyskujemy namiastkę równoległości.
 
 3) Faza zbierania wyników:
 	Po n-krotnym wykonaniu fazy obliczeniowej omówionej w poprzednim punkcie
@@ -57,18 +56,14 @@ Wyróżniamy 4 fazy komunikacyjne pomiędzy procesami:
 				strukturę `TriangleCeofficient` uzupełnioną o swój aktualnie wyliczony
 				współczynnik(tak się składa, że będzie to zawsze 1) oraz zaznacz,
 				że jesteś ostatnim potomnym procesem w polu `isLast` tej struktury.
-		II) W przeciwnym przypadku odbieraj komunikaty(struktury `TriangleCeofficient`)
+		II) W przeciwnym przypadku wyślij współczynnik obliczony w poprzedniej fazie,
+				a następnie zacznij odbierać komunikaty(struktury `TriangleCeofficient`)
 				od potomka tak długo, aż któryś z nich będzie miał odpowiednio odznaczonego
 				pola `isLast` i przesyłaj kolejno do swojego rodzica.
-				Gdy otrzymasz ostatnią paczkę ustaw jej pole `isLast` na nieprawdę,
-				prześlij ją(tę paczkę) do rodzica i skonstruuj odpowiednią paczkę dla siebie,
-				a więc `TriangleCeofficient` z polem `isLast` ustawionym na prawdę
-				oraz `ceofficient` zawierającym odpowiedni współczynnik n-tego wiersza
-				trójkąta Pascala.
 
 	W ten sposób wszystkie paczki ze współczynnikami trafią w dobrej kolejności
-	(symetria) do procesu Pascala. Pascal skończy wczytywać paczki, gdy napotka
-	pierwszą paczkę, której pole `isLast` będzie prawdą, po czym zmieni fazę komunikacji.
+	do procesu Pascala. Pascal skończy wczytywać paczki, gdy napotka pierwszą paczkę, 
+	której pole `isLast` będzie prawdą, po czym zmieni fazę komunikacji.
 
 4) Faza kończenia procesów:
 	Po tym jak n-ty wiersz trójkąta Pascala został obliczony, przekazany do procesu
