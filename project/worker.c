@@ -15,7 +15,7 @@
 #include "err.h"
 
 void initTriangleCeofficient(struct TriangleCeofficient* triangleCeofficient,
-	int ceofficient, char isLastSymbol) {
+	unsigned long ceofficient, char isLastSymbol) {
 	triangleCeofficient->ceofficient = ceofficient;
 	triangleCeofficient->isLast = isLastSymbol;
 }
