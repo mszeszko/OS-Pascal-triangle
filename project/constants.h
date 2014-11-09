@@ -35,7 +35,7 @@ struct ConfirmationMsg {
 
 /* 'Y' stands for "Yes, I'm the last one.". */
 struct TriangleCeofficient {
-	unsigned long int ceofficient;
+	unsigned long ceofficient;
 	char isLast;
 };
 
@@ -43,7 +43,7 @@ struct RequestMsg {
 	enum Token token;
 	int workersLeft; /* Number of workers required to complete the current row. */
 	/* Appropriate ceofficient from predecessing row. */
-	unsigned long int previousCeofficient;
+	unsigned long previousCeofficient;
 };
 
 /* Size of process number represented as a string. */
