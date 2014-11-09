@@ -28,7 +28,7 @@ void readNPrintData(int readDsc, int writeDsc, struct RequestMsg* requestMsg) {
 			syserr("Error while reading triangle results, Pascal\n");
 		
 		/* Print ceofficient to STDOUT. */
-		printf("%ld\n", dataMsg.ceofficient);
+		printf("%lu\n", dataMsg.ceofficient);
 		
 		/* Finish reading when last message has been already processed. */
 		if (dataMsg.isLast == LAST_ONE)

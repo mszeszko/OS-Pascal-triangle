@@ -20,10 +20,10 @@ void initTriangleCeofficient(struct TriangleCeofficient* triangleCeofficient,
 	triangleCeofficient->isLast = isLastSymbol;
 }
 
-void computeCeofficients(long int* actualCeofficient, int processNumber,
+void computeCeofficients(unsigned long* actualCeofficient, int processNumber,
 	int readDsc, int writeDsc, struct RequestMsg* requestMsg)	{
 	/* Used for assigning temporary ceofficient value. */
-	long int previousParentCeofficient;
+	unsigned long previousParentCeofficient;
 	struct ConfirmationMsg confirmationMsg;
 	int requestMsgSize = sizeof(struct RequestMsg);
 	int confirmationMsgSize = sizeof(struct ConfirmationMsg);
@@ -67,7 +67,7 @@ void computeCeofficients(long int* actualCeofficient, int processNumber,
 		syserr("Error while sending confirmation symbol to the parent process.\n");
 }
 
-void gatherCeofficients(long int actualCeofficient, int processNumber, 
+void gatherCeofficients(unsigned long actualCeofficient, int processNumber,
 	int readDsc, int writeDsc, struct RequestMsg* requestMsg) {
 	struct TriangleCeofficient triangleCeofficient;
 	char isLastSymbol;
@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
 	int requestMsgSize;
 	struct ConfirmationMsg confirmationMsg;
 	int confirmationMsgSize;
-	long int actualCeofficient;
+	unsigned long actualCeofficient;
 	char childProcessNumberStr[PROC_NUMBER_BUF_SIZE];
 	int childProcessNumber;
 
