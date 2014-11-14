@@ -128,13 +128,17 @@ int main(int argc, char* argv[]) {
 	int requestMsgSize;
 
 	/* Usage info in case of invalid parameters number. */
-	if (argc != 2)
-		fatal("Usage: %s <number of row in Pascals' Triangle>\n", argv[0]);
+	if (argc != 2) {
+		printf("Usage: %s <number of row in Pascals' Triangle>\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
 
 	/* Eliminate requests with illegal row number. */
 	targetRow = atoi(argv[1]);
-	if (targetRow <= 0)
-		fatal("Row number should be expressed with positive value!\n"); 
+	if (targetRow <= 0) {
+		printf("Row number should be expressed with positive value!\n");
+		exit(EXIT_FAILURE);
+	}
 
 	maxWorkers = targetRow;
 

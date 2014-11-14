@@ -135,13 +135,17 @@ int main(int argc, char* argv[]) {
 	int childProcessNumber;
 
 	/* Usage info in case of invalid parameters number. */
-	if (argc != 2)
-		fatal("Usage: %s <process number>\n", argv[0]);
+	if (argc != 2) {
+		printf("Usage: %s <process number>\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
 	
 	/* Eliminate requests with illegal row number. */
 	processNumber = atoi(argv[1]);
-	if (processNumber <= 0)
-		fatal("Row number should be expressed with positive value!\n");
+	if (processNumber <= 0) {
+		printf("Row number should be expressed with positive value!\n");
+		exit(EXIT_FAILURE);
+	}
 
 	/* Create and initialize pipes. */
 	initParentPipes(readPipe, writePipe);
