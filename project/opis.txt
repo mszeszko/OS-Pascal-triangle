@@ -74,5 +74,7 @@ Wyróżniamy 4 fazy komunikacyjne pomiędzy procesami:
 
 Po zakończeniu ostatniej fazy każdy z procesów kończy działanie.
 
-
+PS
+Kod czyta się najlepiej przy ustawieniu tabulacji(set tabstop=2) w edytorze
+Vim.
 

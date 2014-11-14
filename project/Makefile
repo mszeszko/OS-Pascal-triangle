@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -ansi --pedantic -c
 LDFLAGS = -Wall -ansi --pedantic
 
-OBJECTS = err.o
+OBJECTS = err.o common.o
 ALL = pascal worker
 
 all: $(ALL)
